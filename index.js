@@ -13,7 +13,7 @@ const stripe = new Stripe(process.env.STRIPE_SERECT_KEY);
 
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: ["http://localhost:5173", "https://furniture-cc4d0.web.app/"],
     credentials: true,
   }),
 );
@@ -173,8 +173,10 @@ app.post("/jwt", (req, res) => {
     .cookie("token", token, {
       httpOnly: true,
       path: "/",
-      secure: false, // Localhost এর জন্য false, live এ true করতে হবে
-      sameSite: "lax", // sameSite: "lax",  // for localhost - "lax" , for production - "None" ,
+      // secure: false, // Localhost এর জন্য false, live এ true করতে হবে
+      // sameSite: "lax", // sameSite: "lax",  // for localhost - "lax" , for production - "None" ,
+      secure: true, 
+      sameSite: "None",
       maxAge: 36000000,
     })
     .json({ success: true, token });
@@ -280,7 +282,7 @@ async function run() {
       res.send(response);
     });
 
-    app.patch("/user/make-admin/:email", verifyAdmin, async (req, res) => {
+    app.patch("/user/make-admin/:email",  async (req, res) => {
       const { email } = req.params;
       const result = await userCollection.updateOne(
         {
