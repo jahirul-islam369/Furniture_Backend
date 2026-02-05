@@ -13,7 +13,7 @@ const stripe = new Stripe(process.env.STRIPE_SERECT_KEY);
 
 app.use(
   cors({
-    origin: ["http://localhost:5173", "https://furniture-cc4d0.web.app/"],
+    origin: ["http://localhost:5173", "https://furniture-cc4d0.web.app"],
     credentials: true,
   }),
 );
