@@ -8,12 +8,13 @@ import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 const stripe = new Stripe(process.env.STRIPE_SERECT_KEY);
+const CLIENT_URL = process.env.CLIENT_URL;
 
 app.use(
   cors({
-    origin: ["http://localhost:5173", "https://furniture-cc4d0.web.app"],
+    origin: ["http://localhost:5173",CLIENT_URL],
     credentials: true,
   }),
 );
@@ -591,7 +592,7 @@ async function run() {
           });
 
           return res.json({
-            url: "http://furniture-cc4d0.web.app/user/myOrder",
+            url: `${CLIENT_URL}/user/myOrder`,
           });
         } else if (data.paymentMethod == "Stripe") {
           const products = await Promise.all(
@@ -623,7 +624,7 @@ async function run() {
               cartIDs: cartIDs,
             },
             mode: "payment",
-            success_url: "http://furniture-cc4d0.web.app/success",
+            success_url: `${CLIENT_URL}/user/success`,
           });
 
           res.json({ url: session.url });
@@ -651,11 +652,11 @@ async function run() {
             currency: "BDT",
             tran_id: "REF123", // use unique tran_id for each api call
             success_url:
-              `http://furniture-cc4d0.web.app/success/${orderResult.insertedId}?cartIds=` +
+              `${CLIENT_URL}/success/${orderResult.insertedId}?cartIds=` +
               encodedUrl,
-            fail_url: `http://furniture-cc4d0.web.app/fail/${orderResult.insertedId}`,
-            cancel_url: "http://furniture-cc4d0.web.app/cancel",
-            ipn_url: "http://furniture-cc4d0.web.app/ipn",
+            fail_url: `${CLIENT_URL}/fail/${orderResult.insertedId}`,
+            cancel_url: `${CLIENT_URL}/user/cancel`,
+            ipn_url: `${CLIENT_URL}/user/ipn`,
             shipping_method: "Courier",
             product_name: "Computer.",
             product_category: "Electronic",
@@ -726,7 +727,8 @@ async function run() {
 
       console.log(deletedResult);
 
-      return res.redirect("http://localhost:5173/");
+      return res.redirect(`${CLIENT_URL}/user/myOrder`);
+
     });
 
     app.post("/fail/:orderID", async (req, res) => {
@@ -739,7 +741,7 @@ async function run() {
 
       console.log(deletedResult);
 
-      return res.redirect("http://localhost:5173/");
+      return res.redirect(`${CLIENT_URL}/`);
     });
 
     //  stripe api==========================
@@ -786,7 +788,7 @@ async function run() {
           cartData: JSON.stringify(metaData.cartData),
         },
         mode: "payment",
-        success_url: "http://localhost:5173/success",
+        success_url: `{CLIENT_URL}/user/success`,
       });
 
       res.json({ url: session.url });
@@ -934,5 +936,5 @@ async function run() {
 run().catch(console.dir);
 
 app.listen(port, () => {
-  console.log(`server is running at http://localhost:${port}`);
+  console.log(`server is running on port ${port}`);
 });
