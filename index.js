@@ -14,7 +14,7 @@ const CLIENT_URL = process.env.CLIENT_URL;
 
 app.use(
   cors({
-    origin: ["http://localhost:5173",CLIENT_URL],
+    origin: ["http://localhost:5173", CLIENT_URL],
     credentials: true,
   }),
 );
@@ -32,115 +32,87 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
-
 // create end point URL
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-// webhook
-app.post(
-  "/webhooks",
-  express.raw({ type: "application/json" }),
-  async (request, response) => {
-    let event;
-    if (endpointSecret) {
-      // Get the signature sent by Stripe
+// গ্লোবাল ভেরিয়েবল ডিক্লেয়ার করুন
+let orderCollection, cartCollection, userCollection;
+
+  app.post(
+    "/webhooks",
+    express.raw({ type: "application/json" }),
+    async (request, response) => {
+      let event;
       const signature = request.headers["stripe-signature"];
-      try {
-        event = stripe.webhooks.constructEvent(
-          request.body,
-          signature,
-          endpointSecret,
-        );
-      } catch (err) {
-        console.log(`⚠️ Webhook signature verification failed.`, err.message);
-        return response.sendStatus(400);
+
+      if (endpointSecret && signature) {
+        try {
+          event = stripe.webhooks.constructEvent(
+            request.body,
+            signature,
+            endpointSecret,
+          );
+        } catch (err) {
+          console.log(`⚠️ Webhook signature verification failed.`, err.message);
+          return response.sendStatus(400);
+        }
+
+        // Handle the event
+        switch (event.type) {
+          case "checkout.session.completed":
+            const checkoutMethod = event.data.object;
+            console.log("Payment Successful:", checkoutMethod.id);
+
+            if (!orderCollection || !cartCollection) {
+              console.error("Database collections are not initialized yet!");
+              return response.status(500).send("Database not ready");
+            }
+
+            try {
+              // // run ফাংশনের ভেতর থাকায় সরাসরি DB ব্যবহার করা যাবে
+              // const DB = client.db("furniture");
+              // const orderCollection = DB.collection("orderCollection");
+              // const cartCollection = DB.collection("cartCollection");
+
+              const metaData = checkoutMethod.metadata;
+
+              // ১. অর্ডার স্ট্যাটাস আপডেট করা
+              await orderCollection.updateOne(
+                { _id: new ObjectId(metaData.orderID) },
+                { $set: { paymentStatus: "completed" } },
+              );
+
+              // ২. কার্ট থেকে আইটেম ডিলিট করা
+              const cartIds = JSON.parse(metaData.cartIDs);
+              const objectIDs = cartIds.map((id) => new ObjectId(id));
+
+              const deletedResult = await cartCollection.deleteMany({
+                _id: { $in: objectIDs },
+              });
+
+              console.log("Cart items deleted:", deletedResult.deletedCount);
+            } catch (error) {
+              console.error("Database error in webhook:", error);
+            }
+            break;
+
+          default:
+            console.log(`Unhandled event type ${event.type}`);
+        }
+
+        // Stripe-কে রিপ্লাই দেওয়া যে ইভেন্ট রিসিভ হয়েছে
+        response.json({ received: true });
+      } else {
+        response.status(400).send("Webhook Error: Secret or Signature missing");
       }
+    },
+  );
 
-      // Handle the event
-      switch (event.type) {
-        case "payment_intent.succeeded":
-          const paymentIntent = event.data.object;
-          // Then define and call a method to handle the successful payment intent.
-          // handlePaymentIntentSucceeded(paymentIntent);
-          break;
-        case "payment_method.attached":
-          const paymentMethod = event.data.object;
-          // Then define and call a method to handle the successful attachment of a PaymentMethod.
-          // handlePaymentMethodAttached(paymentMethod);
-          break;
-        case "checkout.session.completed":
-          const checkoutMethod = event.data.object;
-          console.log(checkoutMethod);
 
-          try {
-            await client.connect();
-            // Send a ping to confirm a successful connection
-            await client.db("admin").command({ ping: 1 });
 
-            const DB = client.db("furniture");
-            const orderCollection = DB.collection("orderCollection");
-            const cartCollection = DB.collection("cartCollection");
-
-            const metaData = checkoutMethod.metadata;
-            console.log(metaData);
-
-            const updateResult = await orderCollection.updateOne(
-              {
-                _id: new ObjectId(metaData.orderID),
-              },
-              {
-                $set: {
-                  paymentStatus: "completed",
-                },
-              },
-            );
-
-            // console.log(updateResult);
-
-            const cartIds = JSON.parse(metaData.cartIDs);
-            const objectIDs = cartIds.map((item) => new ObjectId(item));
-
-            // console.log(objectIDs);
-            const deletedResult = await cartCollection.deleteMany({
-              _id: {
-                $in: objectIDs,
-              },
-            });
-
-            console.log(deletedResult);
-
-            // const payload = {
-            //   ...metaData,
-            //   Date: Date.now(),
-            //   cartData: JSON.parse(metaData.cartData),
-            // };
-            // console.log(payload);
-            // const result = await orderCollection.insertOne(payload);
-
-            // console.log(result);
-
-            // const arrayOfIds = JSON.parse(metaData.cartData).map(
-            //   (item) => new ObjectId(item.cartID)
-            // );
-
-            // console.log(arrayOfIds);
-          } catch (error) {
-            console.log(error);
-          }
-
-          break;
-        // ... handle other event types
-        default:
-          console.log(`Unhandled event type ${event.type}`);
-      }
-
-      // Return a response to acknowledge receipt of the event
-      response.json({ received: true });
-    }
-  },
-);
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // security
 // app.post("/jwt", (req, res) => {
@@ -167,7 +139,7 @@ app.post("/jwt", (req, res) => {
   }
 
   const token = jwt.sign({ email }, process.env.JWT_SECRET_KEY, {
-    expiresIn: "1h",
+    expiresIn: "10h",
   });
 
   res
@@ -207,22 +179,18 @@ const verifyToken = (req, res, next) => {
 
 const verifyAdmin = async (req, res, next) => {
   console.log(req.user.email);
-  const DB = client.db("furniture");
-  const userCollection = DB.collection("userCollection");
 
-  const response = await userCollection.findOne({ email: req.user.email });
+  const user = await userCollection.findOne({ email: req.user.email });
 
-  if (response.role == "admin") {
+  if (user && user.role === "admin") {
     next();
   } else {
-    return res.status(401).send({ error: "unauthorized request" });
+     return res.status(403).send({ error: "Forbidden: Admin access required" });
   }
-  console.log(response);
+  console.log(user);
 };
 
 app.get("/isAdmin/:email", async (req, res) => {
-  const DB = client.db("furniture");
-  const userCollection = DB.collection("userCollection");
 
   const response = await userCollection.findOne({ email: req.params.email });
 
@@ -245,12 +213,122 @@ async function run() {
     await client.db("admin").command({ ping: 1 });
 
     const DB = client.db("furniture");
-    const userCollection = DB.collection("userCollection");
     const categoryCollection = DB.collection("categoryCollection");
     const ProductCollection = DB.collection("ProductCollection");
-    const cartCollection = DB.collection("cartCollection");
-    const orderCollection = DB.collection("orderCollection");
+    userCollection = DB.collection("userCollection");
+     cartCollection = DB.collection("cartCollection");
+     orderCollection = DB.collection("orderCollection");
 
+    // // webhook
+    // app.post(
+    //   "/webhooks",
+    //   express.raw({ type: "application/json" }),
+    //   async (request, response) => {
+    //     let event;
+    //     if (endpointSecret) {
+    //       // Get the signature sent by Stripe
+    //       const signature = request.headers["stripe-signature"];
+    //       try {
+    //         event = stripe.webhooks.constructEvent(
+    //           request.body,
+    //           signature,
+    //           endpointSecret,
+    //         );
+    //       } catch (err) {
+    //         console.log(
+    //           `⚠️ Webhook signature verification failed.`,
+    //           err.message,
+    //         );
+    //         return response.sendStatus(400);
+    //       }
+
+    //       // Handle the event
+    //       switch (event.type) {
+    //         case "payment_intent.succeeded":
+    //           const paymentIntent = event.data.object;
+    //           // Then define and call a method to handle the successful payment intent.
+    //           // handlePaymentIntentSucceeded(paymentIntent);
+    //           break;
+    //         case "payment_method.attached":
+    //           const paymentMethod = event.data.object;
+    //           // Then define and call a method to handle the successful attachment of a PaymentMethod.
+    //           // handlePaymentMethodAttached(paymentMethod);
+    //           break;
+    //         case "checkout.session.completed":
+    //           const checkoutMethod = event.data.object;
+    //           console.log(checkoutMethod);
+
+    //           try {
+    //             await client.connect();
+    //             // Send a ping to confirm a successful connection
+    //             await client.db("admin").command({ ping: 1 });
+
+    //             const DB = client.db("furniture");
+    //             const orderCollection = DB.collection("orderCollection");
+    //             const cartCollection = DB.collection("cartCollection");
+
+    //             const metaData = checkoutMethod.metadata;
+    //             console.log(metaData);
+
+    //             const updateResult = await orderCollection.updateOne(
+    //               {
+    //                 _id: new ObjectId(metaData.orderID),
+    //               },
+    //               {
+    //                 $set: {
+    //                   paymentStatus: "completed",
+    //                 },
+    //               },
+    //             );
+
+    //             // console.log(updateResult);
+
+    //             const cartIds = JSON.parse(metaData.cartIDs);
+    //             const objectIDs = cartIds.map((item) => new ObjectId(item));
+
+    //             // console.log(objectIDs);
+    //             const deletedResult = await cartCollection.deleteMany({
+    //               _id: {
+    //                 $in: objectIDs,
+    //               },
+    //             });
+
+    //             console.log(deletedResult);
+
+    //             // const payload = {
+    //             //   ...metaData,
+    //             //   Date: Date.now(),
+    //             //   cartData: JSON.parse(metaData.cartData),
+    //             // };
+    //             // console.log(payload);
+    //             // const result = await orderCollection.insertOne(payload);
+
+    //             // console.log(result);
+
+    //             // const arrayOfIds = JSON.parse(metaData.cartData).map(
+    //             //   (item) => new ObjectId(item.cartID)
+    //             // );
+
+    //             // console.log(arrayOfIds);
+    //           } catch (error) {
+    //             console.log(error);
+    //           }
+
+    //           break;
+    //         // ... handle other event types
+    //         default:
+    //           console.log(`Unhandled event type ${event.type}`);
+    //       }
+
+    //       // Return a response to acknowledge receipt of the event
+    //       response.json({ received: true });
+    //     }
+    //   },
+    // );
+
+   
+    // webhook (এটি run ফাংশনের ভেতরে রাখুন যাতে client.connect() বারবার না করতে হয়)
+  
     app.post("/user", async (req, res) => {
       const body = req.body;
       console.log(body);
@@ -283,7 +361,7 @@ async function run() {
       res.send(response);
     });
 
-    app.patch("/user/make-admin/:email", async (req, res) => {
+    app.patch("/user/make-admin/:email", verifyToken,verifyAdmin, async (req, res) => {
       const { email } = req.params;
       const result = await userCollection.updateOne(
         {
@@ -650,7 +728,7 @@ async function run() {
           const data = {
             total_amount: totalAmount * 122,
             currency: "BDT",
-            tran_id: "REF123", // use unique tran_id for each api call
+            tran_id: orderResult.insertedId.toString(), // use unique tran_id for each api call
             success_url:
               `${CLIENT_URL}/success/${orderResult.insertedId}?cartIds=` +
               encodedUrl,
@@ -696,40 +774,89 @@ async function run() {
 
     // ssl success api
 
+    // app.post("/success/:orderID", async (req, res) => {
+    //   const { orderID } = req.params;
+    //   console.log(orderID);
+
+    //   console.log(req.query);
+
+    //   const updateResult = await orderCollection.updateOne(
+    //     {
+    //       _id: new ObjectId(orderID),
+    //     },
+    //     {
+    //       $set: {
+    //         paymentStatus: "completed",
+    //       },
+    //     },
+    //   );
+
+    //   // const cartIdsString =  req.query.cartIds
+    //   const cartIds = JSON.parse(req.query.cartIds);
+    //   const objectIDs = cartIds.map((item) => new ObjectId(item));
+
+    //   console.log(objectIDs);
+
+    //   const deletedResult = await cartCollection.deleteMany({
+    //     _id: {
+    //       $in: objectIDs,
+    //     },
+    //   });
+
+    //   console.log(deletedResult);
+
+    //   return res.redirect(`${CLIENT_URL}/user/myOrder`);
+    // });
+
     app.post("/success/:orderID", async (req, res) => {
-      const { orderID } = req.params;
-      console.log(orderID);
+  const { orderID } = req.params;
+  const paymentData = req.body; // SSLCommerz পেমেন্ট ডাটা এখানে পাঠায়
 
-      console.log(req.query);
+  // ১. SSLCommerz-এর ক্রেডেনশিয়াল সেট করুন
+  const store_id = process.env.SSL_STORE_ID;
+  const store_passwd = process.env.SSL_STORE_PASS;
+  const is_live = false; // প্রোডাকশনে true হবে
 
+  const sslcz = new SSLCommerzPayment(store_id, store_passwd, is_live);
+
+  try {
+    // ২. পেমেন্ট ভ্যালিডেশন (এটি সরাসরি SSLCommerz সার্ভারে চেক করবে)
+    // পেমেন্ট সফল হলে SSLCommerz একটি val_id পাঠায়
+    const validateResponse = await sslcz.validate({ val_id: paymentData.val_id });
+
+    if (validateResponse.status === 'VALID') {
+      // ৩. পেমেন্ট আসলেও সফল, এখন ডাটাবেজ আপডেট করুন
       const updateResult = await orderCollection.updateOne(
-        {
-          _id: new ObjectId(orderID),
-        },
+        { _id: new ObjectId(orderID) },
         {
           $set: {
             paymentStatus: "completed",
+            transactionId: paymentData.tran_id, // ট্রানজেকশন আইডি সেভ করে রাখা ভালো
+            val_id: paymentData.val_id
           },
-        },
+        }
       );
 
-      // const cartIdsString =  req.query.cartIds
-      const cartIds = JSON.parse(req.query.cartIds);
-      const objectIDs = cartIds.map((item) => new ObjectId(item));
+      // ৪. কার্ট ক্লিয়ার করুন
+      const cartIdsString = req.query.cartIds;
+      if (cartIdsString) {
+        const cartIds = JSON.parse(cartIdsString);
+        const objectIDs = cartIds.map((item) => new ObjectId(item));
+        await cartCollection.deleteMany({ _id: { $in: objectIDs } });
+      }
 
-      console.log(objectIDs);
-
-      const deletedResult = await cartCollection.deleteMany({
-        _id: {
-          $in: objectIDs,
-        },
-      });
-
-      console.log(deletedResult);
-
+      console.log("Payment Verified and Order Updated");
       return res.redirect(`${CLIENT_URL}/user/myOrder`);
-
-    });
+    } else {
+      // পেমেন্ট ভ্যালিড না হলে (হয়তো কেউ ফেক রিকোয়েস্ট পাঠিয়েছে)
+      console.error("Payment Validation Failed!");
+      return res.redirect(`${CLIENT_URL}/user/payment-failed`);
+    }
+  } catch (error) {
+    console.error("Error in success route:", error);
+    res.status(500).send("Internal Server Error");
+  }
+});
 
     app.post("/fail/:orderID", async (req, res) => {
       const { orderID } = req.params;
@@ -788,7 +915,7 @@ async function run() {
           cartData: JSON.stringify(metaData.cartData),
         },
         mode: "payment",
-        success_url: `{CLIENT_URL}/user/success`,
+        success_url: `${CLIENT_URL}/user/success`,
       });
 
       res.json({ url: session.url });
