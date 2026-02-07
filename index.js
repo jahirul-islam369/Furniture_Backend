@@ -175,7 +175,7 @@ app.post("/jwt", (req, res) => {
       path: "/",
       // secure: false, // Localhost এর জন্য false, live এ true করতে হবে
       // sameSite: "lax", // sameSite: "lax",  // for localhost - "lax" , for production - "None" ,
-      secure: true, 
+      secure: true,
       sameSite: "None",
       maxAge: 36000000,
     })
@@ -282,7 +282,7 @@ async function run() {
       res.send(response);
     });
 
-    app.patch("/user/make-admin/:email",  async (req, res) => {
+    app.patch("/user/make-admin/:email", async (req, res) => {
       const { email } = req.params;
       const result = await userCollection.updateOne(
         {
@@ -591,7 +591,7 @@ async function run() {
           });
 
           return res.json({
-            url: "http://localhost:5173/user/myOrder",
+            url: "http://furniture-cc4d0.web.app/user/myOrder",
           });
         } else if (data.paymentMethod == "Stripe") {
           const products = await Promise.all(
@@ -623,7 +623,7 @@ async function run() {
               cartIDs: cartIDs,
             },
             mode: "payment",
-            success_url: "http://localhost:5173/success",
+            success_url: "http://furniture-cc4d0.web.app/success",
           });
 
           res.json({ url: session.url });
@@ -651,11 +651,11 @@ async function run() {
             currency: "BDT",
             tran_id: "REF123", // use unique tran_id for each api call
             success_url:
-              `http://localhost:3000/success/${orderResult.insertedId}?cartIds=` +
+              `http://furniture-cc4d0.web.app/success/${orderResult.insertedId}?cartIds=` +
               encodedUrl,
-            fail_url: `http://localhost:3000/fail/${orderResult.insertedId}`,
-            cancel_url: "http://localhost:3000/cancel",
-            ipn_url: "http://localhost:3000/ipn",
+            fail_url: `http://furniture-cc4d0.web.app/fail/${orderResult.insertedId}`,
+            cancel_url: "http://furniture-cc4d0.web.app/cancel",
+            ipn_url: "http://furniture-cc4d0.web.app/ipn",
             shipping_method: "Courier",
             product_name: "Computer.",
             product_category: "Electronic",
