@@ -22,7 +22,7 @@ app.use(cookieParser());
 
 const uri = process.env.URI;
 
-console.log(`8888888888888 ${uri}`);
+console.log(`88888888 ${uri}`);
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
