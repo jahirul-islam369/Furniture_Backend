@@ -712,6 +712,8 @@ async function run() {
           const store_id = process.env.SSL_STORE_ID;
           const store_passwd = process.env.SSL_STORE_PASS;
           const is_live = false; //true for live, false for sandbox
+          const SERVER_URL = "https://furniture-backend-mm7a.onrender.com"; 
+          
 
           const initialValue = 0;
           const totalAmount = newCartData.reduce(
@@ -729,14 +731,13 @@ async function run() {
             total_amount: totalAmount * 122,
             currency: "BDT",
             tran_id: orderResult.insertedId.toString(), // use unique tran_id for each api call
+
             success_url:
-              `${CLIENT_URL}/user/myOrder`,
-            // success_url:
-            //   `${CLIENT_URL}/success/${orderResult.insertedId}?cartIds=` +
-            //   encodedUrl,  --> for production
-            fail_url: `${CLIENT_URL}/fail/${orderResult.insertedId}`,
-            cancel_url: `${CLIENT_URL}/user/cancel`,
-            ipn_url: `${CLIENT_URL}/user/ipn`,
+              `${SERVER_URL}/success/${orderResult.insertedId}?cartIds=` +
+              encodedUrl,
+            fail_url: `${SERVER_URL}/fail/${orderResult.insertedId}`,
+            cancel_url: `${SERVER_URL}/user/cancel`,
+            ipn_url: `${SERVER_URL}/user/ipn`,
             shipping_method: "Courier",
             product_name: "Computer.",
             product_category: "Electronic",
@@ -852,7 +853,7 @@ async function run() {
     } else {
       // পেমেন্ট ভ্যালিড না হলে (হয়তো কেউ ফেক রিকোয়েস্ট পাঠিয়েছে)
       console.error("Payment Validation Failed!");
-      return res.redirect(`${CLIENT_URL}/user/payment-failed`);
+      return res.redirect(`${CLIENT_URL}/user/ssl-payment-failed`);
     }
   } catch (error) {
     console.error("Error in success route:", error);
