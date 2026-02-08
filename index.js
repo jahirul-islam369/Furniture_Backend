@@ -216,8 +216,8 @@ async function run() {
     const categoryCollection = DB.collection("categoryCollection");
     const ProductCollection = DB.collection("ProductCollection");
     userCollection = DB.collection("userCollection");
-     cartCollection = DB.collection("cartCollection");
-     orderCollection = DB.collection("orderCollection");
+    cartCollection = DB.collection("cartCollection");
+    orderCollection = DB.collection("orderCollection");
 
     // // webhook
     // app.post(
@@ -326,9 +326,8 @@ async function run() {
     //   },
     // );
 
-   
     // webhook (এটি run ফাংশনের ভেতরে রাখুন যাতে client.connect() বারবার না করতে হয়)
-  
+
     app.post("/user", async (req, res) => {
       const body = req.body;
       console.log(body);
@@ -361,21 +360,26 @@ async function run() {
       res.send(response);
     });
 
-    app.patch("/user/make-admin/:email", verifyToken,verifyAdmin, async (req, res) => {
-      const { email } = req.params;
-      const result = await userCollection.updateOne(
-        {
-          email: email,
-        },
-        {
-          $set: {
-            role: "admin",
+    app.patch(
+      "/user/make-admin/:email",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const { email } = req.params;
+        const result = await userCollection.updateOne(
+          {
+            email: email,
           },
-        },
-      );
+          {
+            $set: {
+              role: "admin",
+            },
+          },
+        );
 
-      res.send(result);
-    });
+        res.send(result);
+      },
+    );
 
     app.post("/category", verifyToken, verifyAdmin, async (req, res) => {
       try {
@@ -712,8 +716,7 @@ async function run() {
           const store_id = process.env.SSL_STORE_ID;
           const store_passwd = process.env.SSL_STORE_PASS;
           const is_live = false; //true for live, false for sandbox
-          const SERVER_URL = "https://furniture-backend-mm7a.onrender.com"; 
-          
+          const SERVER_URL = "https://furniture-backend-mm7a.onrender.com";
 
           const initialValue = 0;
           const totalAmount = newCartData.reduce(
@@ -736,7 +739,7 @@ async function run() {
               `${SERVER_URL}/success/${orderResult.insertedId}?cartIds=` +
               encodedUrl,
             fail_url: `${SERVER_URL}/fail/${orderResult.insertedId}`,
-            cancel_url: `${SERVER_URL}/user/cancel`,
+            cancel_url: `${SERVER_URL}/user/cancel/${orderResult.insertedId}`,
             ipn_url: `${SERVER_URL}/user/ipn`,
             shipping_method: "Courier",
             product_name: "Computer.",
@@ -812,54 +815,56 @@ async function run() {
     // });
 
     app.post("/success/:orderID", async (req, res) => {
-  const { orderID } = req.params;
-  const paymentData = req.body; // SSLCommerz পেমেন্ট ডাটা এখানে পাঠায়
+      const { orderID } = req.params;
+      const paymentData = req.body; // SSLCommerz পেমেন্ট ডাটা এখানে পাঠায়
 
-  // ১. SSLCommerz-এর ক্রেডেনশিয়াল সেট করুন
-  const store_id = process.env.SSL_STORE_ID;
-  const store_passwd = process.env.SSL_STORE_PASS;
-  const is_live = false; // প্রোডাকশনে true হবে
+      // ১. SSLCommerz-এর ক্রেডেনশিয়াল সেট করুন
+      const store_id = process.env.SSL_STORE_ID;
+      const store_passwd = process.env.SSL_STORE_PASS;
+      const is_live = false; // প্রোডাকশনে true হবে
 
-  const sslcz = new SSLCommerzPayment(store_id, store_passwd, is_live);
+      const sslcz = new SSLCommerzPayment(store_id, store_passwd, is_live);
 
-  try {
-    // ২. পেমেন্ট ভ্যালিডেশন (এটি সরাসরি SSLCommerz সার্ভারে চেক করবে)
-    // পেমেন্ট সফল হলে SSLCommerz একটি val_id পাঠায়
-    const validateResponse = await sslcz.validate({ val_id: paymentData.val_id });
+      try {
+        // ২. পেমেন্ট ভ্যালিডেশন (এটি সরাসরি SSLCommerz সার্ভারে চেক করবে)
+        // পেমেন্ট সফল হলে SSLCommerz একটি val_id পাঠায়
+        const validateResponse = await sslcz.validate({
+          val_id: paymentData.val_id,
+        });
 
-    if (validateResponse.status === 'VALID') {
-      // ৩. পেমেন্ট আসলেও সফল, এখন ডাটাবেজ আপডেট করুন
-      const updateResult = await orderCollection.updateOne(
-        { _id: new ObjectId(orderID) },
-        {
-          $set: {
-            paymentStatus: "completed",
-            transactionId: paymentData.tran_id, // ট্রানজেকশন আইডি সেভ করে রাখা ভালো
-            val_id: paymentData.val_id
-          },
+        if (validateResponse.status === "VALID") {
+          // ৩. পেমেন্ট আসলেও সফল, এখন ডাটাবেজ আপডেট করুন
+          const updateResult = await orderCollection.updateOne(
+            { _id: new ObjectId(orderID) },
+            {
+              $set: {
+                paymentStatus: "completed",
+                transactionId: paymentData.tran_id, // ট্রানজেকশন আইডি সেভ করে রাখা ভালো
+                val_id: paymentData.val_id,
+              },
+            },
+          );
+
+          // ৪. কার্ট ক্লিয়ার করুন
+          const cartIdsString = req.query.cartIds;
+          if (cartIdsString) {
+            const cartIds = JSON.parse(cartIdsString);
+            const objectIDs = cartIds.map((item) => new ObjectId(item));
+            await cartCollection.deleteMany({ _id: { $in: objectIDs } });
+          }
+
+          console.log("Payment Verified and Order Updated");
+          return res.redirect(`${CLIENT_URL}/user/myOrder`);
+        } else {
+          // পেমেন্ট ভ্যালিড না হলে (হয়তো কেউ ফেক রিকোয়েস্ট পাঠিয়েছে)
+          console.error("Payment Validation Failed!");
+          return res.redirect(`${CLIENT_URL}/user/ssl-payment-failed`);
         }
-      );
-
-      // ৪. কার্ট ক্লিয়ার করুন
-      const cartIdsString = req.query.cartIds;
-      if (cartIdsString) {
-        const cartIds = JSON.parse(cartIdsString);
-        const objectIDs = cartIds.map((item) => new ObjectId(item));
-        await cartCollection.deleteMany({ _id: { $in: objectIDs } });
+      } catch (error) {
+        console.error("Error in success route:", error);
+        res.status(500).send("Internal Server Error");
       }
-
-      console.log("Payment Verified and Order Updated");
-      return res.redirect(`${CLIENT_URL}/user/myOrder`);
-    } else {
-      // পেমেন্ট ভ্যালিড না হলে (হয়তো কেউ ফেক রিকোয়েস্ট পাঠিয়েছে)
-      console.error("Payment Validation Failed!");
-      return res.redirect(`${CLIENT_URL}/user/ssl-payment-failed`);
-    }
-  } catch (error) {
-    console.error("Error in success route:", error);
-    res.status(500).send("Internal Server Error");
-  }
-});
+    });
 
     app.post("/fail/:orderID", async (req, res) => {
       const { orderID } = req.params;
@@ -871,7 +876,12 @@ async function run() {
 
       console.log(deletedResult);
 
-      return res.redirect(`${CLIENT_URL}/`);
+      return res.redirect(`${CLIENT_URL}/user/ssl-payment-failed`);
+    });
+
+    // ইউজার নিজে ক্যান্সেল করলে (Cancel Route)
+    app.post("/user/cancel/:orderID", async (req, res) => {
+      return res.redirect(`${CLIENT_URL}/user/ssl-payment-failed`);
     });
 
     //  stripe api==========================
