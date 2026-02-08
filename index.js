@@ -858,6 +858,10 @@ async function run() {
         } else {
           // পেমেন্ট ভ্যালিড না হলে (হয়তো কেউ ফেক রিকোয়েস্ট পাঠিয়েছে)
           console.error("Payment Validation Failed!");
+          const deletedResult = await orderCollection.deleteOne({
+            _id: new ObjectId(orderID),
+          });
+
           return res.redirect(`${CLIENT_URL}/user/ssl-payment-failed`);
         }
       } catch (error) {
@@ -881,6 +885,14 @@ async function run() {
 
     // ইউজার নিজে ক্যান্সেল করলে (Cancel Route)
     app.post("/user/cancel/:orderID", async (req, res) => {
+      const { orderID } = req.params;
+      console.log(orderID);
+
+      const deletedResult = await orderCollection.deleteOne({
+        _id: new ObjectId(orderID),
+      });
+
+      console.log(deletedResult);
       return res.redirect(`${CLIENT_URL}/user/ssl-payment-failed`);
     });
 
