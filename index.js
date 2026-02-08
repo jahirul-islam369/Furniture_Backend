@@ -702,7 +702,7 @@ async function run() {
               cartIDs: cartIDs,
             },
             mode: "payment",
-            success_url: `${CLIENT_URL}/user/success`,
+            success_url: `${CLIENT_URL}/success`,
           });
 
           res.json({ url: session.url });
@@ -730,8 +730,10 @@ async function run() {
             currency: "BDT",
             tran_id: orderResult.insertedId.toString(), // use unique tran_id for each api call
             success_url:
-              `${CLIENT_URL}/success/${orderResult.insertedId}?cartIds=` +
-              encodedUrl,
+              `${CLIENT_URL}/user/myOrder`,
+            // success_url:
+            //   `${CLIENT_URL}/success/${orderResult.insertedId}?cartIds=` +
+            //   encodedUrl,  --> for production
             fail_url: `${CLIENT_URL}/fail/${orderResult.insertedId}`,
             cancel_url: `${CLIENT_URL}/user/cancel`,
             ipn_url: `${CLIENT_URL}/user/ipn`,
