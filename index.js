@@ -38,78 +38,75 @@ const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 // গ্লোবাল ভেরিয়েবল ডিক্লেয়ার করুন
 let orderCollection, cartCollection, userCollection;
 
-  app.post(
-    "/webhooks",
-    express.raw({ type: "application/json" }),
-    async (request, response) => {
-      let event;
-      const signature = request.headers["stripe-signature"];
+app.post(
+  "/webhooks",
+  express.raw({ type: "application/json" }),
+  async (request, response) => {
+    let event;
+    const signature = request.headers["stripe-signature"];
 
-      if (endpointSecret && signature) {
-        try {
-          event = stripe.webhooks.constructEvent(
-            request.body,
-            signature,
-            endpointSecret,
-          );
-        } catch (err) {
-          console.log(`⚠️ Webhook signature verification failed.`, err.message);
-          return response.sendStatus(400);
-        }
-
-        // Handle the event
-        switch (event.type) {
-          case "checkout.session.completed":
-            const checkoutMethod = event.data.object;
-            console.log("Payment Successful:", checkoutMethod.id);
-
-            if (!orderCollection || !cartCollection) {
-              console.error("Database collections are not initialized yet!");
-              return response.status(500).send("Database not ready");
-            }
-
-            try {
-              // // run ফাংশনের ভেতর থাকায় সরাসরি DB ব্যবহার করা যাবে
-              // const DB = client.db("furniture");
-              // const orderCollection = DB.collection("orderCollection");
-              // const cartCollection = DB.collection("cartCollection");
-
-              const metaData = checkoutMethod.metadata;
-
-              // ১. অর্ডার স্ট্যাটাস আপডেট করা
-              await orderCollection.updateOne(
-                { _id: new ObjectId(metaData.orderID) },
-                { $set: { paymentStatus: "completed" } },
-              );
-
-              // ২. কার্ট থেকে আইটেম ডিলিট করা
-              const cartIds = JSON.parse(metaData.cartIDs);
-              const objectIDs = cartIds.map((id) => new ObjectId(id));
-
-              const deletedResult = await cartCollection.deleteMany({
-                _id: { $in: objectIDs },
-              });
-
-              console.log("Cart items deleted:", deletedResult.deletedCount);
-            } catch (error) {
-              console.error("Database error in webhook:", error);
-            }
-            break;
-
-          default:
-            console.log(`Unhandled event type ${event.type}`);
-        }
-
-        // Stripe-কে রিপ্লাই দেওয়া যে ইভেন্ট রিসিভ হয়েছে
-        response.json({ received: true });
-      } else {
-        response.status(400).send("Webhook Error: Secret or Signature missing");
+    if (endpointSecret && signature) {
+      try {
+        event = stripe.webhooks.constructEvent(
+          request.body,
+          signature,
+          endpointSecret,
+        );
+      } catch (err) {
+        console.log(`⚠️ Webhook signature verification failed.`, err.message);
+        return response.sendStatus(400);
       }
-    },
-  );
 
+      // Handle the event
+      switch (event.type) {
+        case "checkout.session.completed":
+          const checkoutMethod = event.data.object;
+          console.log("Payment Successful:", checkoutMethod.id);
 
+          if (!orderCollection || !cartCollection) {
+            console.error("Database collections are not initialized yet!");
+            return response.status(500).send("Database not ready");
+          }
 
+          try {
+            // // run ফাংশনের ভেতর থাকায় সরাসরি DB ব্যবহার করা যাবে
+            // const DB = client.db("furniture");
+            // const orderCollection = DB.collection("orderCollection");
+            // const cartCollection = DB.collection("cartCollection");
+
+            const metaData = checkoutMethod.metadata;
+
+            // ১. অর্ডার স্ট্যাটাস আপডেট করা
+            await orderCollection.updateOne(
+              { _id: new ObjectId(metaData.orderID) },
+              { $set: { paymentStatus: "completed" } },
+            );
+
+            // ২. কার্ট থেকে আইটেম ডিলিট করা
+            const cartIds = JSON.parse(metaData.cartIDs);
+            const objectIDs = cartIds.map((id) => new ObjectId(id));
+
+            const deletedResult = await cartCollection.deleteMany({
+              _id: { $in: objectIDs },
+            });
+
+            console.log("Cart items deleted:", deletedResult.deletedCount);
+          } catch (error) {
+            console.error("Database error in webhook:", error);
+          }
+          break;
+
+        default:
+          console.log(`Unhandled event type ${event.type}`);
+      }
+
+      // Stripe-কে রিপ্লাই দেওয়া যে ইভেন্ট রিসিভ হয়েছে
+      response.json({ received: true });
+    } else {
+      response.status(400).send("Webhook Error: Secret or Signature missing");
+    }
+  },
+);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -185,13 +182,12 @@ const verifyAdmin = async (req, res, next) => {
   if (user && user.role === "admin") {
     next();
   } else {
-     return res.status(403).send({ error: "Forbidden: Admin access required" });
+    return res.status(403).send({ error: "Forbidden: Admin access required" });
   }
   console.log(user);
 };
 
 app.get("/isAdmin/:email", async (req, res) => {
-
   const response = await userCollection.findOne({ email: req.params.email });
 
   if (response?.role === "admin") {
@@ -429,14 +425,14 @@ async function run() {
       }
     });
 
-    app.get("/product", async (req, res) => {
-      try {
-        const result = await ProductCollection.find().toArray();
-        res.send(result);
-      } catch (error) {
-        res.status(500).json({ error: error.message });
-      }
-    });
+    // app.get("/product", async (req, res) => {
+    //   try {
+    //     const result = await ProductCollection.find().toArray();
+    //     res.send(result);
+    //   } catch (error) {
+    //     res.status(500).json({ error: error.message });
+    //   }
+    // });
 
     app.get("/product/:id", async (req, res) => {
       const { id } = req.params;
@@ -1075,6 +1071,120 @@ async function run() {
       );
 
       res.send(result);
+    });
+    // Filter category part
+    app.get("/products", async (req, res) => {
+      try {
+        const { q, category, minPrice, maxPrice, sort, page, limit } =
+          req.query;
+
+        // ১. মেইন কুয়েরি অবজেক্ট
+        let query = {};
+        let andConditions = []; // সব কন্ডিশন এখানে জমা হবে
+
+        // ২. সার্চ টার্ম (Regex)
+        if (q && q.trim() !== "") {
+          const escapedWord = q.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          andConditions.push({
+            $or: [
+              { title: { $regex: escapedWord, $options: "i" } },
+              { description: { $regex: escapedWord, $options: "i" } },
+            ],
+          });
+        }
+
+        // ৩. ক্যাটাগরি ফিল্টার (Multiple)
+        if (
+          category &&
+          category !== "All Categories" &&
+          category !== "" &&
+          category !== "undefined"
+        ) {
+          const categoryArray = category.split(",");
+          const categoryRegex = categoryArray.map(
+            (cat) =>
+              new RegExp(
+                cat.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+                "i",
+              ),
+          );
+          andConditions.push({ category: { $in: categoryRegex } });
+        }
+
+        // ৪. প্রাইস রেঞ্জ (String to Double Conversion - Error Free)
+        if (minPrice || maxPrice) {
+          let priceExpr = { $and: [] };
+
+          if (minPrice && !isNaN(parseFloat(minPrice))) {
+            priceExpr.$and.push({
+              $gte: [{ $toDouble: "$offeredPrice" }, parseFloat(minPrice)],
+            });
+          }
+
+          if (maxPrice && !isNaN(parseFloat(maxPrice))) {
+            priceExpr.$and.push({
+              $lte: [{ $toDouble: "$offeredPrice" }, parseFloat(maxPrice)],
+            });
+          }
+
+          // যদি প্রাইস কন্ডিশন থাকে তবেই $expr যোগ হবে
+          if (priceExpr.$and.length > 0) {
+            andConditions.push({ $expr: priceExpr });
+          }
+        }
+
+        // ৫. সব কন্ডিশন একসাথে করা
+        if (andConditions.length > 0) {
+          query = { $and: andConditions };
+        }
+
+        // সর্টিং ও প্যাজিনেশন
+        let sortOption = { _id: -1 };
+        if (sort === "price_asc") sortOption = { offeredPrice: 1 };
+        if (sort === "price_desc") sortOption = { offeredPrice: -1 };
+
+        const pageNum = parseInt(page) || 1;
+        const limitNum = parseInt(limit) || 12;
+        const skip = (pageNum - 1) * limitNum;
+
+        const results = await ProductCollection.find(query)
+          .sort(sortOption)
+          .skip(skip)
+          .limit(limitNum)
+          .toArray();
+
+        const totalItems = await ProductCollection.countDocuments(query);
+
+        res.send({
+          products: results,
+          totalItems,
+          totalPages: Math.ceil(totalItems / limitNum),
+          currentPage: pageNum,
+        });
+      } catch (error) {
+        console.error("Server Error:", error); // টার্মিনালে এরর লগ হবে
+        res
+          .status(500)
+          .json({ error: "Internal Server Error", message: error.message });
+      }
+    });
+
+    app.get("/category-counts", async (req, res) => {
+      try {
+        const counts = await ProductCollection.aggregate([
+          {
+            $group: {
+              _id: "$category", // আপনার প্রোডাক্ট মডেলে যে ফিল্ডে ক্যাটাগরি নাম আছে
+              total: { $sum: 1 }, // প্রতিটির জন্য ১ যোগ করবে
+            },
+          },
+        ]).toArray();
+
+        // আউটপুট হবে অনেকটা এরকম: [{_id: "Sofa", total: 10}, {_id: "Table", total: 5}]
+        res.send(counts);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+      }
     });
 
     console.log(
