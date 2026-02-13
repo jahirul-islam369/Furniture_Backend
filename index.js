@@ -1055,7 +1055,7 @@ async function run() {
       console.log(email);
     });
 
-    app.patch("/order/:id", verifyToken, async (req, res) => {
+    app.patch("/order/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
 
       const result = await orderCollection.updateOne(
@@ -1184,6 +1184,31 @@ async function run() {
         res.send(counts);
       } catch (error) {
         res.status(500).json({ error: error.message });
+      }
+    });
+    // আপনার Express backend-এর API endpoint
+    app.get("/order-stats", async (req, res) => {
+      try {
+        // ১. কতগুলো ডেলিভারি হয়েছে (delivered)
+        const deliveredCount = await orderCollection.countDocuments({
+          orderStatus: "delivered",
+        });
+
+        // ২. কতগুলো পেন্ডিং আছে (pending)
+        const pendingCount = await orderCollection.countDocuments({
+          orderStatus: "pending",
+        });
+
+        // ৩. মোট কতগুলো অর্ডার (ঐচ্ছিক)
+        const totalOrders = await orderCollection.countDocuments();
+
+        res.send({
+          delivered: deliveredCount,
+          pending: pendingCount,
+          total: totalOrders,
+        });
+      } catch (error) {
+        res.status(500).send({ message: "Error counting orders" });
       }
     });
 
