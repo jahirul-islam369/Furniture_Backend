@@ -1187,11 +1187,11 @@ async function run() {
       }
     });
     // আপনার Express backend-এর API endpoint
-    app.get("/order-stats", async (req, res) => {
+    app.get("/order-stats", verifyToken, verifyAdmin, async (req, res) => {
       try {
         // ১. কতগুলো ডেলিভারি হয়েছে (delivered)
         const deliveredCount = await orderCollection.countDocuments({
-          orderStatus: "delivered",
+          orderStatus: "Delivered",
         });
 
         // ২. কতগুলো পেন্ডিং আছে (pending)
