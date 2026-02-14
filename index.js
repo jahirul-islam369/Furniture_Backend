@@ -210,119 +210,11 @@ async function run() {
 
     const DB = client.db("furniture");
     const categoryCollection = DB.collection("categoryCollection");
+    const wishlistCollection = DB.collection("wishlistCollection");
     const ProductCollection = DB.collection("ProductCollection");
     userCollection = DB.collection("userCollection");
     cartCollection = DB.collection("cartCollection");
     orderCollection = DB.collection("orderCollection");
-
-    // // webhook
-    // app.post(
-    //   "/webhooks",
-    //   express.raw({ type: "application/json" }),
-    //   async (request, response) => {
-    //     let event;
-    //     if (endpointSecret) {
-    //       // Get the signature sent by Stripe
-    //       const signature = request.headers["stripe-signature"];
-    //       try {
-    //         event = stripe.webhooks.constructEvent(
-    //           request.body,
-    //           signature,
-    //           endpointSecret,
-    //         );
-    //       } catch (err) {
-    //         console.log(
-    //           `⚠️ Webhook signature verification failed.`,
-    //           err.message,
-    //         );
-    //         return response.sendStatus(400);
-    //       }
-
-    //       // Handle the event
-    //       switch (event.type) {
-    //         case "payment_intent.succeeded":
-    //           const paymentIntent = event.data.object;
-    //           // Then define and call a method to handle the successful payment intent.
-    //           // handlePaymentIntentSucceeded(paymentIntent);
-    //           break;
-    //         case "payment_method.attached":
-    //           const paymentMethod = event.data.object;
-    //           // Then define and call a method to handle the successful attachment of a PaymentMethod.
-    //           // handlePaymentMethodAttached(paymentMethod);
-    //           break;
-    //         case "checkout.session.completed":
-    //           const checkoutMethod = event.data.object;
-    //           console.log(checkoutMethod);
-
-    //           try {
-    //             await client.connect();
-    //             // Send a ping to confirm a successful connection
-    //             await client.db("admin").command({ ping: 1 });
-
-    //             const DB = client.db("furniture");
-    //             const orderCollection = DB.collection("orderCollection");
-    //             const cartCollection = DB.collection("cartCollection");
-
-    //             const metaData = checkoutMethod.metadata;
-    //             console.log(metaData);
-
-    //             const updateResult = await orderCollection.updateOne(
-    //               {
-    //                 _id: new ObjectId(metaData.orderID),
-    //               },
-    //               {
-    //                 $set: {
-    //                   paymentStatus: "completed",
-    //                 },
-    //               },
-    //             );
-
-    //             // console.log(updateResult);
-
-    //             const cartIds = JSON.parse(metaData.cartIDs);
-    //             const objectIDs = cartIds.map((item) => new ObjectId(item));
-
-    //             // console.log(objectIDs);
-    //             const deletedResult = await cartCollection.deleteMany({
-    //               _id: {
-    //                 $in: objectIDs,
-    //               },
-    //             });
-
-    //             console.log(deletedResult);
-
-    //             // const payload = {
-    //             //   ...metaData,
-    //             //   Date: Date.now(),
-    //             //   cartData: JSON.parse(metaData.cartData),
-    //             // };
-    //             // console.log(payload);
-    //             // const result = await orderCollection.insertOne(payload);
-
-    //             // console.log(result);
-
-    //             // const arrayOfIds = JSON.parse(metaData.cartData).map(
-    //             //   (item) => new ObjectId(item.cartID)
-    //             // );
-
-    //             // console.log(arrayOfIds);
-    //           } catch (error) {
-    //             console.log(error);
-    //           }
-
-    //           break;
-    //         // ... handle other event types
-    //         default:
-    //           console.log(`Unhandled event type ${event.type}`);
-    //       }
-
-    //       // Return a response to acknowledge receipt of the event
-    //       response.json({ received: true });
-    //     }
-    //   },
-    // );
-
-    // webhook (এটি run ফাংশনের ভেতরে রাখুন যাতে client.connect() বারবার না করতে হয়)
 
     app.post("/user", async (req, res) => {
       const body = req.body;
@@ -633,6 +525,67 @@ async function run() {
         res.send(response);
       } catch (error) {
         res.status(500).send({ error: error.message });
+      }
+    });
+
+    app.post("/wishlist", verifyToken, async (req, res) => {
+      const { productID, email } = req.body;
+
+      if (!productID)
+        return res.status(400).json({ error: "productID is required" });
+      if (!email) return res.status(400).json({ error: "email is required" });
+
+      try {
+        const previouswishlist = await wishlistCollection.findOne({
+          productID: productID,
+          email: email,
+        });
+        console.log(previouswishlist);
+
+        if (previouswishlist) {
+          return res.send({ error: "Product is already in wishlist " });
+        }
+
+        const result = await wishlistCollection.insertOne({
+          productID,
+          email,
+        });
+        res.send(result);
+      } catch (error) {
+        res.status(500).json(error.message);
+      }
+    });
+
+    app.get("/wishlist/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+
+      if (email !== req.user?.email) {
+        return res.status(401).send({
+          error: "Unauthorized Access, please login from original account",
+        });
+      }
+
+      try {
+        const result = await wishlistCollection
+          .aggregate([
+            { $match: { email } },
+            { $addFields: { productObjID: { $toObjectId: "$productID" } } },
+            {
+              $lookup: {
+                from: "ProductCollection",
+                localField: "productObjID",
+                foreignField: "_id",
+                as: "productInfo",
+              },
+            },
+            { $unwind: "$productInfo" },
+            { $project: { _id: 1, email: 1, productInfo: 1 } },
+          ])
+          .toArray();
+
+        res.json(result);
+      } catch (error) {
+        res.status(500).json({ error: error.message });
       }
     });
 
