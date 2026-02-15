@@ -317,14 +317,19 @@ async function run() {
       }
     });
 
-    // app.get("/product", async (req, res) => {
-    //   try {
-    //     const result = await ProductCollection.find().toArray();
-    //     res.send(result);
-    //   } catch (error) {
-    //     res.status(500).json({ error: error.message });
-    //   }
-    // });
+       app.get("/product-all", verifyToken, verifyAdmin, async (req, res) => {
+         try {
+           const results = await ProductCollection.find().toArray();
+           const totalItems = await ProductCollection.countDocuments();
+           res.send({
+             products: results,
+             totalItems: totalItems,
+           });
+         } catch (error) {
+           res.status(500).json({ error: error.message });
+         }
+       });
+
 
     app.get("/product/:id", async (req, res) => {
       const { id } = req.params;
@@ -528,33 +533,46 @@ async function run() {
       }
     });
 
-    app.post("/wishlist", verifyToken, async (req, res) => {
-      const { productID, email } = req.body;
+     app.post("/wishlist", verifyToken, async (req, res) => {
+       const { productID, email } = req.body;
 
-      if (!productID)
-        return res.status(400).json({ error: "productID is required" });
-      if (!email) return res.status(400).json({ error: "email is required" });
+       if (!productID)
+         return res.status(400).json({ error: "productID is required" });
+       if (!email) return res.status(400).json({ error: "email is required" });
 
-      try {
-        const previouswishlist = await wishlistCollection.findOne({
-          productID: productID,
-          email: email,
-        });
-        console.log(previouswishlist);
+       try {
+         const previousCart = await cartCollection.findOne({
+           productID: productID,
+           email: email,
+         });
+         console.log(previousCart);
 
-        if (previouswishlist) {
-          return res.send({ error: "Product is already in wishlist " });
-        }
+         if (previousCart) {
+           return res.send({
+             error:
+               "Product is already in cart. You cann't add this Product in wishlist   ",
+           });
+         }
 
-        const result = await wishlistCollection.insertOne({
-          productID,
-          email,
-        });
-        res.send(result);
-      } catch (error) {
-        res.status(500).json(error.message);
-      }
-    });
+         const previouswishlist = await wishlistCollection.findOne({
+           productID: productID,
+           email: email,
+         });
+         console.log(previouswishlist);
+
+         if (previouswishlist) {
+           return res.send({ error: "Product is already in wishlist" });
+         }
+
+         const result = await wishlistCollection.insertOne({
+           productID,
+           email,
+         });
+         res.send(result);
+       } catch (error) {
+         res.status(500).json(error.message);
+       }
+     });
 
     app.get("/wishlist/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
@@ -588,6 +606,19 @@ async function run() {
         res.status(500).json({ error: error.message });
       }
     });
+    app.delete("/wishlist/:id", verifyToken, async (req, res) => {
+      const { id } = req.params;
+      try {
+        const response = await wishlistCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+        console.log(response);
+        res.status(200).json(response);
+      } catch (error) {
+        res.status(500).json(error);
+      }
+    });
+
 
     // payment Methods
 
